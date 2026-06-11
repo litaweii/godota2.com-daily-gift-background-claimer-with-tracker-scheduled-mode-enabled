@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root, [data-theme="dark"] {
+      --accent: oklch(0.78 0.16 142);
+      --accent-strong: oklch(0.78 0.16 142);
+      --accent-fg: #0a0e0c;
+      --accent-soft: color-mix(in oklch, oklch(0.78 0.16 142) 18%, transparent);
+      --accent-line: color-mix(in oklch, oklch(0.78 0.16 142) 30%, transparent);
+      --text: #f4f1ea;
+      --muted: rgba(244, 241, 234, 0.55);
+      --dim: rgba(244, 241, 234, 0.32);
+      --faint: rgba(244, 241, 234, 0.18);
+      --line: rgba(244, 241, 234, 0.10);
+      --glass: rgba(244, 241, 234, 0.045);
+      --glass-hi: rgba(244, 241, 234, 0.08);
+      --bg-base: oklch(0.13 0.01 260);
+      --glow-1: oklch(0.24 0.06 145);
+      --glow-2: oklch(0.20 0.04 270);
+      --primary-bg: #f4f1ea;
+      --primary-fg: #0a0e0c;
+      --danger: oklch(0.70 0.18 25);
+      --warn: oklch(0.80 0.15 75);
+      --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    [data-theme="light"] {
+      --accent: oklch(0.58 0.18 145);
+      --accent-strong: oklch(0.55 0.18 145);
+      --accent-fg: #ffffff;
+      --accent-soft: color-mix(in oklch, oklch(0.58 0.18 145) 14%, transparent);
+      --accent-line: color-mix(in oklch, oklch(0.58 0.18 145) 32%, transparent);
+      --text: oklch(0.20 0.01 260);
+      --muted: rgba(20, 22, 26, 0.62);
+      --dim: rgba(20, 22, 26, 0.40);
+      --faint: rgba(20, 22, 26, 0.18);
+      --line: rgba(20, 22, 26, 0.10);
+      --glass: rgba(255, 255, 255, 0.55);
+      --glass-hi: rgba(255, 255, 255, 0.80);
+      --bg-base: oklch(0.97 0.008 80);
+      --glow-1: oklch(0.93 0.06 145);
+      --glow-2: oklch(0.94 0.04 270);
+      --primary-bg: oklch(0.20 0.01 260);
+      --primary-fg: #f4f1ea;
+      --danger: oklch(0.55 0.20 25);
+      --warn: oklch(0.62 0.18 70);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      background: var(--bg-base);
+    }
+
+    body {
+      width: 320px;
+      min-height: 200px;
+      font-family: var(--sans);
+      font-size: 13px;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse at 80% -10%, var(--glow-1) 0%, transparent 55%),
+        radial-gradient(ellipse at 0% 110%, var(--glow-2) 0%, transparent 50%),
+        var(--bg-base);
+      position: relative;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background-color .25s ease, color .25s ease;
+    }
+
+    /* Subtle grid texture, faded toward edges */
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.4;
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 32px 32px;
+      -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+      mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    }
+
+    .wrap {
+      position: relative;
+      padding: 20px 18px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ─── Header ─── */
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--accent-strong);
+      color: var(--accent-fg);
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      flex-shrink: 0;
+    }
+    .brand-text {
+      line-height: 1.05;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .brand-kicker {
+      font-size: 9.5px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+    .brand-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+    .pill {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid var(--accent-line);
+      flex-shrink: 0;
+    }
+    .head-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .theme-toggle {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-radius: 999px;
+      background: var(--glass);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-size: 0;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .theme-toggle:hover:not(:disabled) {
+      transform: none;
+      background: var(--glass-hi);
+      color: var(--text);
+      border-color: var(--faint);
+    }
+    .theme-toggle .theme-icon-light { display: none; }
+    [data-theme="light"] .theme-toggle .theme-icon-dark { display: none; }
+    [data-theme="light"] .theme-toggle .theme-icon-light { display: block; }
+
+    /* ─── Glass card base ─── */
+    .glass {
+      background: var(--glass);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    /* ─── Hero balance ─── */
+    .hero {
+      padding: 16px 16px 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-label {
+      font-size: 9.5px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .hero-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .hero-number {
+      font-size: 36px;
+      font-weight: 300;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .hero-unit {
+      font-size: 14px;
+      color: var(--muted);
+      margin-left: 6px;
+      letter-spacing: 0;
+      font-weight: 400;
+    }
+    .hero-delta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .hero-delta.uncertain { color: var(--warn); }
+    .hero-delta.neutral { color: var(--muted); }
+    .hero-delta.zero { display: none; }
+
+    .spark {
+      width: 100%;
+      height: 32px;
+      display: block;
+      margin-top: 12px;
+    }
+
+    /* ─── Profile field ─── */
+    .field {
+      padding: 9px 12px;
+    }
+    .field-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 500;
+      margin-bottom: 3px;
+    }
+    .field input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 11.5px;
+      font-family: var(--mono);
+      padding: 0;
+      letter-spacing: -0.01em;
+    }
+    .field input::placeholder {
+      color: var(--dim);
+    }
+    .field:focus-within {
+      border-color: var(--accent-line);
+    }
+
+    /* ─── Actions ─── */
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 96px;
+      gap: 8px;
+    }
+    button {
+      padding: 12px 14px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      cursor: pointer;
+      font-family: var(--sans);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: opacity .15s, transform .1s, background .15s, border-color .15s;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    #btnCollect {
+      background: var(--primary-bg);
+      color: var(--primary-fg);
+      border: none;
+    }
+    #btnCollect:hover:not(:disabled) {
+      filter: brightness(1.05);
+    }
+    #btnTest {
+      background: var(--glass);
+      color: var(--text);
+      border-color: var(--line);
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 12px 10px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    #btnTest:hover:not(:disabled) {
+      background: var(--glass-hi);
+      border-color: var(--faint);
+    }
+    #btnStop {
+      background: color-mix(in oklch, var(--danger) 16%, transparent);
+      color: var(--danger);
+      border: 1px solid color-mix(in oklch, var(--danger) 35%, transparent);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    #btnStop:hover:not(:disabled) {
+      background: color-mix(in oklch, var(--danger) 24%, transparent);
+    }
+
+    /* ─── Status capsule ─── */
+    .status-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+      flex-shrink: 0;
+      transition: background .2s, box-shadow .2s;
+    }
+    .status-box[data-status="error"] .status-dot {
+      background: var(--danger);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger) 25%, transparent);
+    }
+    .status-box[data-status="progress"] .status-dot {
+      background: var(--warn);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--warn) 25%, transparent);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    #statusText {
+      font-size: 11px;
+      color: var(--text);
+      line-height: 1.3;
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+    }
+    .status-box[data-status="error"] #statusText { color: var(--danger); }
+    .status-box[data-status="progress"] #statusText { color: var(--text); }
+
+    /* ─── Schedule ─── */
+    .sched {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sched-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .sched-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .sched-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+      line-height: 1.35;
+    }
+    .switch {
+      position: relative;
+      width: 38px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .switch .track {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: var(--faint);
+      transition: background .2s;
+    }
+    .switch .thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--text);
+      transition: transform .2s;
+    }
+    .switch input:checked + .track {
+      background: var(--accent-strong);
+    }
+    .switch input:checked + .track + .thumb {
+      transform: translateX(16px);
+      background: var(--accent-fg);
+    }
+    .sched-time {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height .25s ease, opacity .25s ease;
+    }
+    .sched.on .sched-time {
+      max-height: 80px;
+      opacity: 1;
+    }
+    .sched-time label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .sched-time input {
+      width: 46px;
+      background: var(--glass);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      text-align: center;
+      padding: 5px 4px;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .sched-time input:focus {
+      border-color: var(--accent-line);
+    }
+    .sched-warn {
+      display: flex;
+      gap: 7px;
+      align-items: flex-start;
+      font-size: 10px;
+      color: var(--warn);
+      line-height: 1.35;
+    }
+    .sched-warn svg { flex-shrink: 0; margin-top: 1px; }
+    .sched-next {
+      font-size: 10px;
+      color: var(--dim);
+      font-family: var(--mono);
+    }
+
+    /* ─── Stats grid ─── */
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .stat {
+      padding: 9px 10px;
+    }
+    .stat-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-value.success { color: var(--accent); }
+    .stat-value.uncertain { color: var(--warn); }
+
+    /* ─── History footer ─── */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .link-btn {
+      background: transparent;
+      color: var(--text);
+      border: none;
+      padding: 0;
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--sans);
+    }
+    .link-btn:hover:not(:disabled) {
+      color: var(--text);
+      transform: none;
+    }
+    .link-btn.dim {
+      color: var(--dim);
+      font-size: 11px;
+    }
+    .link-btn.dim:hover:not(:disabled) {
+      color: var(--muted);
+    }
+    .link-btn svg {
+      flex-shrink: 0;
+    }
+    .link-btn .count {
+      color: var(--dim);
+      font-weight: 400;
+    }
+
+    /* ─── History list ─── */
+    #historyList {
+      display: none;
+      max-height: 180px;
+      overflow-y: auto;
+      margin-top: 4px;
+    }
+    #historyList.visible {
+      display: flex;
+      flex-direction: column;
+    }
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .history-item:last-child {
+      border-bottom: none;
+    }
+    .history-meta {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+      gap: 1px;
+    }
+    .history-date {
+      font-size: 10px;
+      color: var(--dim);
+    }
+    .history-balance {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .history-delta {
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .history-delta.positive { color: var(--accent); }
+    .history-delta.uncertain { color: var(--warn); }
+    .history-delta.neutral { color: var(--muted); }
+    .history-empty {
+      font-size: 11px;
+      color: var(--dim);
+      text-align: center;
+      padding: 12px 0;
+    }
+
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--faint);
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- Header -->
+    <div class="head">
+      <div class="brand">
+        <div class="brand-icon">G2</div>
+        <div class="brand-text">
+          <div class="brand-kicker">Daily Claimer</div>
+          <div class="brand-title">GoDota2</div>
+        </div>
+      </div>
+      <div class="head-right">
+        <button class="theme-toggle" id="btnTheme" data-i18n-title="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+          <svg class="theme-icon-dark" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5Z"></path>
+          </svg>
+          <svg class="theme-icon-light" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="3"></circle>
+            <path d="M8 1.5v1.5M8 13v1.5M1.5 8h1.5M13 8h1.5M3.3 3.3l1 1M11.7 11.7l1 1M3.3 12.7l1-1M11.7 4.3l1-1"></path>
+          </svg>
+        </button>
+        <div class="pill" id="modePill" data-i18n="pillOnline">online</div>
+      </div>
+    </div>
+
+    <!-- Hero balance -->
+    <div class="glass hero">
+      <div class="hero-label" data-i18n="labelTotalCollected">Total collected</div>
+      <div class="hero-row">
+        <div class="hero-number">
+          <span id="statTotal">0</span><span class="hero-unit">G2</span>
+        </div>
+        <div class="hero-delta" id="heroDelta">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5l3.5 4h-2.2v3h-2.6v-3H1.5z" fill="currentColor"></path></svg>
+          <span id="statLast">—</span>
+        </div>
+      </div>
+      <svg class="spark" id="sparkline" viewBox="0 0 284 32" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="spark-grad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"></stop>
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"></stop>
+          </linearGradient>
+        </defs>
+        <path id="spark-fill" d="" fill="url(#spark-grad)"></path>
+        <path id="spark-line" d="" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path>
+      </svg>
+    </div>
+
+    <!-- Profile -->
+    <div class="glass field">
+      <div class="field-label" data-i18n="labelSteamProfile">Steam profile</div>
+      <input type="text" id="profileUrl" placeholder="https://steamcommunity.com/id/..." spellcheck="false" autocomplete="off" />
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button id="btnCollect">
+        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3.5v9l8-4.5-8-4.5Z" fill="currentColor"></path></svg>
+        <span data-i18n="btnCollectLabel">Collect</span>
+      </button>
+      <button id="btnTest">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 2v3.5L3 12.5A1.5 1.5 0 0 0 4.4 14.5h7.2A1.5 1.5 0 0 0 13 12.5L10 5.5V2"></path>
+          <path d="M5.5 2h5"></path>
+        </svg>
+        <span data-i18n="btnTestLabel">Test</span>
+      </button>
+    </div>
+
+    <!-- Stop (виден только во время процесса) -->
+    <button id="btnStop" style="display:none; width:100%;">
+      <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"></rect></svg>
+      <span data-i18n="btnStopLabel">Stop</span>
+    </button>
+
+    <!-- Status -->
+    <div class="glass status-box" id="statusBox" data-status="info">
+      <span class="status-dot"></span>
+      <span id="statusText" data-i18n="statusReady">Ready</span>
+    </div>
+
+    <!-- Schedule -->
+    <div class="glass sched" id="schedBox">
+      <div class="sched-row">
+        <div>
+          <div class="sched-title" data-i18n="schedTitle">Scheduled auto-collect</div>
+          <div class="sched-sub" data-i18n="schedSub">Runs daily without pressing the button</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="schedEnabled" />
+          <span class="track"></span>
+          <span class="thumb"></span>
+        </label>
+      </div>
+      <div class="sched-time" id="schedTimeRow">
+        <label for="schedHour" data-i18n="schedTimeLabel">Time</label>
+        <input type="number" id="schedHour" min="0" max="23" inputmode="numeric" />
+        <span style="color:var(--muted);">:</span>
+        <input type="number" id="schedMinute" min="0" max="59" inputmode="numeric" />
+        <span class="sched-next" id="schedNext"></span>
+      </div>
+      <div class="sched-warn">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 1.5 1 14h14L8 1.5Z"></path>
+          <path d="M8 6.5v3.5"></path>
+          <path d="M8 12h.01"></path>
+        </svg>
+        <span data-i18n="schedWarn">Each collection changes your Steam nickname — trades get blocked for ~3 hours. Pick a time when you don't need to trade.</span>
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="stats">
+      <div class="glass stat">
+        <div class="stat-label" data-i18n="statAvgLabel">Average</div>
+        <div class="stat-value" id="statAvg">0</div>
+      </div>
+      <div class="glass stat">
+        <div class="stat-label" data-i18n="statCountLabel">Collections</div>
+        <div class="stat-value" id="statCount">0</div>
+      </div>
+      <div class="glass stat">
+        <div class="stat-label" data-i18n="statStreakLabel">Streak</div>
+        <div class="stat-value" id="statStreak">0</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <button class="link-btn" id="btnHistory">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2.5 8a5.5 5.5 0 1 0 1.7-4"></path>
+          <path d="M2 2v3.5h3.5"></path>
+          <path d="M8 5v3.2l2.2 1.3"></path>
+        </svg>
+        <span data-i18n="btnHistoryLabel">History</span> <span class="count" id="historyCount"></span>
+      </button>
+      <button class="link-btn dim" id="btnClear">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 4.5h10"></path>
+          <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"></path>
+          <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5"></path>
+        </svg>
+        <span data-i18n="btnClearLabel">Clear</span>
+      </button>
+    </div>
+
+    <div id="historyList"></div>
+
+    <!-- Диагностика (debug) -->
+    <div class="footer" style="margin-top:4px;">
+      <button class="link-btn dim" id="btnDiag">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="7" cy="7" r="5"></circle>
+          <path d="M11 11l3 3"></path>
+        </svg>
+        <span data-i18n="btnDiagLabel">Balance diagnostics</span>
+      </button>
+    </div>
+    <div id="diagList" style="display:none; max-height:240px; overflow-y:auto; margin-top:6px; font-family:var(--mono); font-size:10px; color:var(--muted); line-height:1.5;"></div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
