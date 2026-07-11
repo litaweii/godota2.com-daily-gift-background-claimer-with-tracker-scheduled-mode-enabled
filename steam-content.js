@@ -148,7 +148,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleChangeNickname(addText) {
   try {
-    const input = findNicknameInput();
+    // Ждём поле, а не ищем мгновенно: страница редактирования рендерится
+    // скриптами Steam и поле может появиться позже, чем загрузится вкладка.
+    const input = await waitForElement(findNicknameInput, 10000);
     if (!input) {
       return { success: false, message: t('errNickFieldNotFound') };
     }
@@ -213,7 +215,7 @@ async function handleChangeNickname(addText) {
 
 async function handleRestoreNickname(originalNickname) {
   try {
-    const input = findNicknameInput();
+    const input = await waitForElement(findNicknameInput, 10000);
     if (!input) {
       return { success: false, message: t('errNickFieldNotFound') };
     }

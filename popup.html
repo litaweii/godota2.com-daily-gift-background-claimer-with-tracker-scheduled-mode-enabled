@@ -279,6 +279,31 @@
     .field:focus-within {
       border-color: var(--accent-line);
     }
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .field-row input {
+      flex: 1;
+      min-width: 0;
+    }
+    .field-btn {
+      flex-shrink: 0;
+      padding: 4px 9px;
+      border-radius: 7px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid var(--accent-line);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .field-btn:hover:not(:disabled) {
+      background: color-mix(in oklch, var(--accent) 26%, transparent);
+      transform: none;
+    }
 
     /* ─── Actions ─── */
     .actions {
@@ -551,6 +576,10 @@
     .link-btn.dim:hover:not(:disabled) {
       color: var(--muted);
     }
+    .link-btn.armed,
+    .link-btn.armed:hover:not(:disabled) {
+      color: var(--danger);
+    }
     .link-btn svg {
       flex-shrink: 0;
     }
@@ -679,7 +708,10 @@
     <!-- Profile -->
     <div class="glass field">
       <div class="field-label" data-i18n="labelSteamProfile">Steam profile</div>
-      <input type="text" id="profileUrl" placeholder="https://steamcommunity.com/id/..." spellcheck="false" autocomplete="off" />
+      <div class="field-row">
+        <input type="text" id="profileUrl" placeholder="https://steamcommunity.com/id/..." spellcheck="false" autocomplete="off" />
+        <button class="field-btn" id="btnDetect" data-i18n="btnDetectLabel" data-i18n-title="btnDetectHint" title="">Detect</button>
+      </div>
     </div>
 
     <!-- Actions -->

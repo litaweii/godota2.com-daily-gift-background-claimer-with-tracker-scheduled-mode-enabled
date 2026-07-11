@@ -55,19 +55,21 @@ function parseBalance(text) {
 }
 
 function getBalanceElement() {
-  // Стратегия 1: по id
-  let el = document.querySelector('#balance_ontop');
-  if (el) return el;
+  // Реальные id сайта (в порядке приоритета): #balance_ontop — шапка при
+  // логине, #balance_main — блок профиля, #balance_mobile — мобильное меню.
+  // Предпочитаем видимый элемент: скрытые могут показывать устаревший «0».
+  const ids = ['#balance_ontop', '#balance_main', '#balance_mobile'];
+  let firstExisting = null;
+  for (const sel of ids) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    if (isVisible(el)) return el;
+    if (!firstExisting) firstExisting = el;
+  }
+  if (firstExisting) return firstExisting;
 
-  // Стратегия 2: по классу
-  el = document.querySelector('.balance_ontop, .user-balance, .balance-value');
-  if (el) return el;
-
-  // Стратегия 3: по data-атрибуту
-  el = document.querySelector('[data-balance]');
-  if (el) return el;
-
-  return null;
+  // Фоллбэк на случай редизайна
+  return document.querySelector('.balance_ontop, .user-balance, .balance-value, [data-balance]');
 }
 
 function getBalance() {
@@ -76,7 +78,22 @@ function getBalance() {
   return parseBalance(el.textContent);
 }
 
-function isLoggedIn() {
+// Сайт рендерит в каждую страницу инлайн-скрипт <script>STEAMID = '765…'</script>
+// ('0' — не авторизован). Это самый надёжный признак: main.js сайта сам
+// проверяет по нему вход. Возвращает строку steamid или null, если скрипт
+// не найден (например, после редизайна).
+function readSteamId() {
+  for (const s of document.querySelectorAll('script:not([src])')) {
+    const m = (s.textContent || '').match(/STEAMID\s*=\s*'(\d*)'/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// Единственный источник истины о состоянии авторизации на странице.
+// Основной сигнал — STEAMID; DOM-эвристики остаются фоллбэком.
+function readAuthState() {
+  const steamId = readSteamId();
   const loginButton = findLoginButton();
   const bodyText = document.body?.innerText || '';
   const lower = bodyText.toLowerCase();
@@ -85,17 +102,31 @@ function isLoggedIn() {
     getBalance() !== null ||
     Array.from(document.querySelectorAll('img')).some(img => isVisible(img) && ((img.src || '').includes('avatars') || /avatar/i.test(img.className || ''))) ||
     document.getElementById('balance_ontop') ||
-    lower.includes('balance:') && !loginButton ||
+    (lower.includes('balance:') && !loginButton) ||
     lower.includes('login with:') ||
     lower.includes('connecting') ||
     lower.includes('generating token') ||
     /logout|выйти|sign\s*out/i.test(bodyText)
   );
 
-  return !loginButton && hasUserPanel;
+  const loggedIn = steamId !== null
+    ? steamId !== '' && steamId !== '0'
+    : !loginButton && hasUserPanel;
+
+  return {
+    steamId,
+    loggedIn,
+    loginButton,
+    hasUserPanel,
+    isConnecting: lower.includes('connecting') || lower.includes('generating token')
+  };
 }
 
 function findLoginButton() {
+  // Реальная разметка сайта: <div class="top_signin"><a href="?login"><img …></a></div>
+  const byHref = Array.from(document.querySelectorAll('a[href$="?login"], .top_signin a')).find(isVisible);
+  if (byHref) return byHref;
+
   const image = Array.from(document.querySelectorAll('img')).find(img => {
     const alt = (img.alt || '').toLowerCase();
     const src = (img.src || '').toLowerCase();
@@ -125,7 +156,15 @@ function findLoginButton() {
 }
 
 function findDailyGiftTab() {
-  // Стратегия 1: по тексту
+  // Стратегия 1: класс из реальной разметки — клик по .js_dailygift открывает
+  // модалку .open_daily (обработчик в main.js сайта). Берём видимый экземпляр:
+  // второй лежит в скрытом мобильном меню.
+  const real = Array.from(document.querySelectorAll('.js_dailygift'));
+  const visible = real.find(isVisible);
+  if (visible) return visible;
+  if (real.length) return real[0];
+
+  // Стратегия 2: по тексту
   const tabs = document.querySelectorAll('a, button, div, li, span');
   for (const tab of tabs) {
     const text = (tab.textContent || '').trim();
@@ -134,15 +173,8 @@ function findDailyGiftTab() {
     }
   }
 
-  // Стратегия 2: по href или data-атрибуту
-  const links = document.querySelectorAll('a[href*="daily"], [data-tab*="daily"]');
-  for (const link of links) return link;
-
-  // Стратегия 3: по id/классу
-  const el = document.querySelector('#daily-tab, .daily-tab, [class*="daily"]');
-  if (el) return el;
-
-  return null;
+  // Стратегия 3: по href, data-атрибуту, id/классу
+  return document.querySelector('a[href*="daily"], [data-tab*="daily"], #daily-tab, .daily-tab, [class*="daily"]');
 }
 
 function findDailyButton() {
@@ -166,17 +198,64 @@ function findDailyButton() {
   return null;
 }
 
+// Только ПОЛНЫЕ формулировки сайта «бонус уже получен». Раньше проверялись
+// одиночные слова (/already/, /tomorrow/, /завтра/) по всему body — любое такое
+// слово в чате сайта давало ложное «уже собрано» и сбор молча пропускался.
+const COLLECTED_PATTERNS = [
+  /already\s*(collected|received|opened|got|claimed)/i,
+  /try\s*(it\s*)?again\s*(the\s*)?next\s*day/i,
+  /come\s*back\s*tomorrow/i,
+  /next\s*(gift|daily|bonus)\s*in/i,
+  /уже\s*получ/i,
+  /приходи(те)?\s*завтра/i,
+  /следующий\s*(подарок|бонус)?\s*через/i
+];
+
 function isAlreadyCollected() {
-  const body = document.body.textContent || '';
-  const patterns = [
-    /already/i,
-    /tomorrow/i,
-    /try\s*it\s*again\s*next\s*day/i,
-    /уже\s*получен/i,
-    /завтра/i,
-    /следующий\s*через/i
-  ];
-  return patterns.some(p => p.test(body));
+  // Сначала попапы-уведомления сайта (совокупный текст заголовка и сообщения).
+  if (readNotifyTexts().some(text => COLLECTED_PATTERNS.some(p => p.test(text)))) {
+    return true;
+  }
+
+  // Затем видимые «листовые» узлы с коротким текстом (надписи у кнопки и т.п.) —
+  // а не весь body, где длинные блоки вроде чата дают ложные совпадения.
+  for (const el of document.querySelectorAll('*')) {
+    if (el.children.length > 0) continue;
+    const raw = (el.textContent || '').trim();
+    if (!raw || raw.length > 120) continue;
+    if (!isVisible(el)) continue;
+    if (COLLECTED_PATTERNS.some(p => p.test(raw))) return true;
+  }
+  return false;
+}
+
+// Тексты видимых попапов-уведомлений сайта (notify() в main.js сайта рендерит
+// их в .notifications: <div class="notify"><span>title</span><span>mess</span>).
+function readNotifyTexts() {
+  return Array.from(document.querySelectorAll('.notifications .notify'))
+    .filter(isVisible)
+    .map(el => normalizeText(el.textContent))
+    .filter(Boolean);
+}
+
+// Ищет сообщение сайта об отказе из-за отсутствия маркера в нике
+// («add godota2.com to your name» и т.п.). Возвращает текст или null.
+// Заголовок и текст попапа лежат в РАЗНЫХ span'ах, поэтому сначала проверяем
+// совокупный текст попапов, и лишь потом — одиночные видимые узлы.
+function findMarkerRejection() {
+  const looksLikeRejection = text =>
+    /godota2\.com/i.test(text) && /nick|name|ник|имя/i.test(text);
+
+  const notifyHit = readNotifyTexts().find(looksLikeRejection);
+  if (notifyHit) return notifyHit;
+
+  for (const el of document.querySelectorAll('*')) {
+    if (el.children.length > 0 || !isVisible(el)) continue;
+    const raw = (el.textContent || '').trim();
+    if (!raw || raw.length > 160) continue;
+    if (looksLikeRejection(raw)) return raw;
+  }
+  return null;
 }
 
 // ─── Обработчик сообщений ───────────────────────────────────────────────────
@@ -185,10 +264,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.action) {
     case 'checkAuthState':
       handleCheckAuth().then(sendResponse);
-      return true;
-
-    case 'clickSteamLogin':
-      handleClickLogin().then(sendResponse);
       return true;
 
     case 'waitForGodotaReady':
@@ -203,10 +278,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleDiagnoseBalance().then(sendResponse);
       return true;
 
-    case 'waitForBalanceChange':
-      handleWaitBalanceChange(message.referenceValue, message.timeoutMs).then(sendResponse);
-      return true;
-
     case 'collectDailyBonus':
       handleCollectBonus().then(sendResponse);
       return true;
@@ -219,41 +290,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleCheckAuth() {
-  const loginButton = findLoginButton();
-  const bodyText = document.body?.innerText || '';
-  const lower = bodyText.toLowerCase();
-
-  const hasUserPanel = Boolean(
-    getBalance() !== null ||
-    Array.from(document.querySelectorAll('img')).some(img => isVisible(img) && ((img.src || '').includes('avatars') || /avatar/i.test(img.className || ''))) ||
-    document.getElementById('balance_ontop') ||
-    lower.includes('balance:') && !loginButton ||
-    lower.includes('login with:') ||
-    lower.includes('connecting') ||
-    lower.includes('generating token') ||
-    /logout|выйти|sign\s*out/i.test(bodyText)
-  );
+  const { steamId, loggedIn, loginButton, hasUserPanel, isConnecting } = readAuthState();
 
   return {
     success: true,
-    loggedIn: !loginButton && hasUserPanel,
+    loggedIn,
+    steamId,
     loginButtonFound: Boolean(loginButton),
-    isConnecting: lower.includes('connecting') || lower.includes('generating token'),
+    isConnecting,
     message: loginButton
       ? t('msgLoginBtnVisible')
       : hasUserPanel
         ? t('msgAuthSigns')
         : t('msgAuthUnknown')
   };
-}
-
-async function handleClickLogin() {
-  const loginButton = await waitForCondition(findLoginButton, 20000);
-  if (!loginButton) {
-    return { success: false, message: t('errNoLoginButton') };
-  }
-  findClickableAncestor(loginButton).click();
-  return { success: true, message: t('msgLoginClicked') };
 }
 
 async function handleWaitReady() {
@@ -282,55 +332,6 @@ function handleGetBalance(sendResponse) {
     balance,
     message: balance !== null ? t('msgBalance', [String(balance)]) : t('errBalanceRead')
   });
-}
-
-async function handleWaitBalanceChange(referenceValue, timeoutMs = 15000) {
-  // ИДЕЯ: ждём, пока баланс СТАНЕТ БОЛЬШЕ исходного (именно зачисление, а не ререндер),
-  // а затем убедимся, что значение «устаканилось» (1.5 сек подряд без роста) —
-  // чтобы не зафиксировать промежуточное число во время анимации счётчика.
-  const startTime = Date.now();
-  const interval = 250;
-  const stabilizationMs = 1500;
-
-  let bestValue = null;        // максимум, который мы видели
-  let lastChangeAt = null;     // когда bestValue последний раз вырос
-
-  while (Date.now() - startTime < timeoutMs) {
-    const current = getBalance();
-
-    if (current !== null) {
-      // Засчитываем только РОСТ относительно исходного значения.
-      // (Если referenceValue не известно — null — берём любое непустое.)
-      const isIncrease =
-        referenceValue === null
-          ? bestValue === null || current > bestValue
-          : current > referenceValue && (bestValue === null || current >= bestValue);
-
-      if (isIncrease) {
-        if (bestValue === null || current > bestValue) {
-          bestValue = current;
-          lastChangeAt = Date.now();
-        }
-      }
-
-      // Если уже видели рост и он не меняется stabilizationMs — выходим
-      if (bestValue !== null && lastChangeAt !== null) {
-        if (Date.now() - lastChangeAt >= stabilizationMs) {
-          return { changed: true, value: bestValue, stabilized: true };
-        }
-      }
-    }
-
-    await sleep(interval);
-  }
-
-  // Таймаут. Возвращаем лучшее увиденное значение (если был рост) или текущее (как фоллбэк).
-  const finalValue = bestValue !== null ? bestValue : getBalance();
-  return {
-    changed: finalValue !== null && finalValue !== referenceValue,
-    value: finalValue,
-    stabilized: false
-  };
 }
 
 // ─── ДИАГНОСТИКА ─────────────────────────────────────────────────────────────
@@ -457,15 +458,18 @@ function readWinAmountFromPopup() {
   return null;
 }
 
-// Ждёт появления попапа с суммой до timeoutMs мс (частый polling)
-async function waitForWinAmount(timeoutMs = 8000) {
+// Ждёт сумму выигрыша до timeoutMs: сочетает частый polling и результат
+// MutationObserver'а (holder) — выходит сразу, как только сумма поймана любым
+// из двух путей, не досиживая таймаут.
+async function waitForWinAmount(timeoutMs, holder) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
+    if (holder && holder.result !== null) return holder.result;
     const amount = readWinAmountFromPopup();
     if (amount !== null) return amount;
     await sleep(120);
   }
-  return null;
+  return holder ? holder.result : null;
 }
 
 // Ставит MutationObserver, который ловит попап в момент его появления в DOM.
@@ -527,10 +531,19 @@ async function handleCollectBonus() {
 
     // Ловим сумму двумя путями параллельно: polling + observer.
     // 15 сек — с запасом на анимацию «верчения» рулетки перед попапом.
-    // Observer вернёт результат сразу, как попап появится, не ожидая таймаута.
-    const polled = await waitForWinAmount(15000);
-    const winAmount = polled !== null ? polled : observerHolder.result;
+    const winAmount = await waitForWinAmount(15000, observerHolder);
     observerHolder.stop();
+
+    // Сумма не поймана — проверяем, не ответил ли сайт отказом.
+    if (winAmount === null) {
+      if (isAlreadyCollected()) {
+        return { success: false, alreadyCollected: true, status: 'already_collected', message: t('msgAlreadyCollectedToday') };
+      }
+      const rejection = findMarkerRejection();
+      if (rejection) {
+        return { success: false, alreadyCollected: false, status: 'error', markerRejected: true, message: t('errMarkerRejected') };
+      }
+    }
 
     return {
       success: true,

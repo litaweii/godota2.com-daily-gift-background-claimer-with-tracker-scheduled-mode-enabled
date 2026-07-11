@@ -105,12 +105,27 @@ function sendRunState(running) {
   chrome.runtime.sendMessage({ type: 'runState', isRunning: running }).catch(() => {});
 }
 
+// Хост из URL. Нужен для точных проверок навигации: `url.includes('godota2.com')`
+// срабатывало ещё на странице Steam OpenID, потому что адрес возврата
+// (openid.return_to=https%3A%2F%2Fgodota2.com...) содержит этот домен в параметрах.
+function urlHost(url) {
+  try {
+    return new URL(url).hostname;
+  } catch (e) {
+    return '';
+  }
+}
+
 async function sendToTab(tabId, message, retries = 5, delay = 600) {
   for (let i = 0; i < retries; i++) {
     throwIfCancelled();
     try {
       const response = await chrome.tabs.sendMessage(tabId, message);
-      return response;
+      // undefined = content script есть, но обработчик не ответил (например,
+      // скрипт ещё инициализируется). Без этой проверки вызывающий код падал
+      // бы с TypeError на response.success.
+      if (response !== undefined) return response;
+      throw new Error('empty response');
     } catch (e) {
       if (i < retries - 1) {
         await sleep(delay);
@@ -343,8 +358,15 @@ async function changeNickname(profileUrl) {
   }
 
   originalNickname = result.originalNickname;
+  // Если с прошлого незавершённого сбора остался сохранённый оригинал —
+  // он точнее: content script при уже стоящем маркере вычисляет «оригинал»
+  // вычитанием маркера, и для обрезанного ника это даст усечённую версию.
+  const stale = await getPendingRestore();
+  if (stale && stale.original) {
+    originalNickname = stale.original;
+  }
   // Сразу фиксируем в storage: если worker умрёт до восстановления — доведём при старте.
-  await setPendingRestore(profileUrl, result.originalNickname);
+  await setPendingRestore(profileUrl, originalNickname);
   if (result.truncated) {
     sendStatus(t('statusNickTruncated'), 'info');
   }
@@ -434,7 +456,23 @@ async function waitForTabUrl(tabId, predicate, timeoutMs = 30000) {
   throw new Error(t('errNavTimeout'));
 }
 
-async function ensureGodotaAuth() {
+const GODOTA_ORIGIN = 'https://godota2.com/';
+
+// Навигация в godota-вкладке + ожидание полной готовности страницы.
+async function godotaNavigate(query) {
+  await chrome.tabs.update(godotaTabId, { url: GODOTA_ORIGIN + query });
+  await sleep(500);
+  await waitForTabCompletePolling(godotaTabId, 45000);
+  await sendToTab(godotaTabId, { action: 'waitForGodotaReady' }, 60, 500).catch(() => null);
+}
+
+// refreshProfile: сайт кэширует ник Steam в сессии и перечитывает его из Steam
+// только при входе или по собственному endpoint'у ?update (его использует сам
+// main.js сайта при отказе из-за ника). Поэтому при живой сессии после смены
+// ника достаточно сходить на ?update — без выхода из аккаунта: сессия, ставки
+// и вывод предметов не затрагиваются. Если сайт всё равно не увидит маркер,
+// runFullProcess сделает жёсткий перелогин (hardRelogin) и повторит сбор.
+async function ensureGodotaAuth(refreshProfile = false) {
   sendStatus(t('statusOpeningGodota'));
   godotaTabId = await createBackgroundTab('https://godota2.com/');
   await waitForTabCompletePolling(godotaTabId, 45000);
@@ -445,53 +483,95 @@ async function ensureGodotaAuth() {
   let authState = await sendToTab(godotaTabId, { action: 'checkAuthState' }, 35, 500);
 
   if (authState && authState.loggedIn) {
-    sendStatus(t('statusAlreadyAuthed'));
-    return;
-  }
-
-  if (!authState || !authState.loginButtonFound) {
-    await sleep(1500);
-    authState = await sendToTab(godotaTabId, { action: 'checkAuthState' }, 20, 500);
-
-    if (authState && authState.loggedIn) {
-      sendStatus(t('statusAuthed'));
+    if (!refreshProfile) {
+      sendStatus(t('statusAlreadyAuthed'));
       return;
     }
+
+    sendStatus(t('statusRefreshingProfile'));
+    await godotaNavigate('?update');
+    authState = await sendToTab(godotaTabId, { action: 'checkAuthState' }, 20, 500).catch(() => null);
+    if (authState && authState.loggedIn) {
+      sendStatus(t('statusProfileRefreshed'));
+      return;
+    }
+    // ?update разлогинил или сессия истекла — идём обычным путём входа.
   }
 
-  if (!authState || !authState.loginButtonFound) {
-    throw new Error(authState?.message || t('errNoLoginButton'));
+  await loginViaSteam();
+}
+
+// Жёсткое обновление сессии: выход по прямому URL ?logout, затем обычный вход.
+// Возвращает false, если выйти не удалось (сессия пережила ?logout).
+async function hardRelogin() {
+  sendStatus(t('statusLoggingOut'));
+  await godotaNavigate('?logout');
+
+  const state = await sendToTab(godotaTabId, { action: 'checkAuthState' }, 20, 500).catch(() => null);
+  if (state && state.loggedIn) {
+    sendStatus(t('errLogoutFailed'), 'info');
+    return false;
   }
 
+  await loginViaSteam();
+  return true;
+}
+
+// Вход через Steam OpenID. Кнопка «Sign in through Steam» на сайте — это
+// просто ссылка на ?login, поэтому переходим по URL напрямую: не зависим от
+// поиска кнопки в DOM (раньше процесс падал именно на этом шаге).
+async function loginViaSteam() {
   sendStatus(t('statusClickingLogin'));
-  const clickResult = await sendToTab(godotaTabId, { action: 'clickSteamLogin' }, 50, 500);
-  if (!clickResult || !clickResult.success) {
-    throw new Error(clickResult?.message || t('errClickLogin'));
-  }
+  await chrome.tabs.update(godotaTabId, { url: GODOTA_ORIGIN + '?login' });
 
   sendStatus(t('statusWaitingOpenId'));
-  await waitForTabUrl(godotaTabId, url => url.includes('steamcommunity.com/openid/login'), 45000);
+  try {
+    await waitForTabUrl(
+      godotaTabId,
+      url => urlHost(url) === 'steamcommunity.com' && url.includes('/openid/login'),
+      45000
+    );
+  } catch (e) {
+    // Страница OpenID могла проскочить быстрее опроса (Steam мгновенно
+    // подтвердил вход) — если мы уже вернулись авторизованными, всё готово.
+    const st = await sendToTab(godotaTabId, { action: 'checkAuthState' }, 10, 500).catch(() => null);
+    if (st && st.loggedIn) {
+      sendStatus(t('statusAuthSuccess'));
+      return;
+    }
+    throw e;
+  }
   await waitForTabCompletePolling(godotaTabId, 45000);
 
   sendStatus(t('statusConfirmingOpenId'));
   const openIdResult = await sendToTab(godotaTabId, { action: 'confirmSteamOpenId' }, 60, 500);
 
+  const manualLogin = Boolean(openIdResult && openIdResult.manualActionRequired);
   if (!openIdResult || !openIdResult.success) {
-    if (openIdResult && openIdResult.manualActionRequired) {
+    if (manualLogin) {
       sendStatus(t('statusManualLogin'), 'error');
       await revealAutomationWindow();
+      // Пароль + Steam Guard занимают время — перезапускаем watchdog, чтобы
+      // общий 5-минутный лимит отсчитывался с этого момента, а не со старта.
+      startWatchdog();
     } else {
       throw new Error(openIdResult?.message || t('errConfirmOpenId'));
     }
   }
 
   sendStatus(t('statusWaitingReturn'));
-  await waitForTabUrl(godotaTabId, url => url.includes('godota2.com'), 120000);
+  // ВАЖНО: проверяем именно хост — параметр openid.return_to в URL Steam
+  // содержит «godota2.com», и .includes() срабатывал ещё на странице OpenID.
+  await waitForTabUrl(
+    godotaTabId,
+    url => urlHost(url).endsWith('godota2.com'),
+    manualLogin ? 240000 : 120000
+  );
   await waitForTabCompletePolling(godotaTabId, 45000);
 
   // Если показывали окно для ручного входа — после возврата прячем обратно
   // и отдаём фокус пользователю.
-  if (openIdResult && openIdResult.manualActionRequired) {
+  if (manualLogin) {
     await restoreUserFocus();
   }
 
@@ -507,8 +587,40 @@ async function ensureGodotaAuth() {
   sendStatus(t('statusAuthSuccess'));
 }
 
-async function waitForTabNavigation(tabId, urlFragment, timeoutMs = 30000) {
-  return await waitForTabUrl(tabId, url => url.includes(urlFragment), timeoutMs);
+// ─── Автоопределение ссылки на профиль Steam ────────────────────────────────
+// Актуальный аккаунт — тот, чья сессия сейчас залогинена в браузере, поэтому
+// ссылку не нужно спрашивать у пользователя:
+// 1) steamcommunity.com/my/ — служебный адрес Steam, редиректит на канонический
+//    профиль текущей сессии (/id/<vanity> или /profiles/<steamid64>). fetch из
+//    service worker'а идёт с куками (есть host_permissions), так что конечный
+//    URL ответа и есть ссылка на профиль. Без вкладок и без DOM.
+// 2) Фоллбэк: каждая страница godota2.com содержит инлайн `STEAMID = '765…'`
+//    ('0' = гость) — если в Steam в браузере не залогинен, но залогинен на
+//    сайте, строим /profiles/<steamid64> из него.
+async function detectProfileUrl() {
+  try {
+    const resp = await fetch('https://steamcommunity.com/my/', {
+      credentials: 'include',
+      cache: 'no-store'
+    });
+    const u = new URL(resp.url);
+    const m = u.pathname.match(/^\/(?:id|profiles)\/[^/]+/);
+    // Незалогиненного Steam редиректит на /login/… — m будет null.
+    if (u.hostname === 'steamcommunity.com' && m) {
+      return { success: true, url: 'https://steamcommunity.com' + m[0], source: 'steam' };
+    }
+  } catch (e) { /* сети нет или редирект сорвался — пробуем фоллбэк */ }
+
+  try {
+    const resp = await fetch(GODOTA_ORIGIN, { credentials: 'include', cache: 'no-store' });
+    const text = await resp.text();
+    const m = text.match(/STEAMID\s*=\s*'(\d{17})'/); // '0' у гостя не совпадёт
+    if (m) {
+      return { success: true, url: 'https://steamcommunity.com/profiles/' + m[1], source: 'godota' };
+    }
+  } catch (e) { /* ignore */ }
+
+  return { success: false };
 }
 
 // ─── Сбор бонуса ────────────────────────────────────────────────────────────
@@ -532,6 +644,12 @@ async function collectBonus() {
   if (collectResult.alreadyCollected) {
     sendStatus(t('statusAlreadyCollected'), 'info');
     return { status: 'already_collected', balanceBefore: beforeValue, balanceAfter: beforeValue, delta: 0 };
+  }
+
+  // Сайт отклонил сбор, не увидев маркер в нике. Не бросаем ошибку: вызывающий
+  // код (runFullProcess) может вылечить это жёстким перелогином и повторить.
+  if (collectResult.markerRejected) {
+    return { status: 'marker_rejected', balanceBefore: beforeValue, balanceAfter: beforeValue, delta: 0, message: collectResult.message };
   }
 
   if (!collectResult.success) {
@@ -633,11 +751,24 @@ async function runFullProcess(profileUrl) {
     // Шаг 1-3: Смена никнейма
     await changeNickname(profileUrl);
 
-    // Шаг 4-7: Авторизация на godota2
-    await ensureGodotaAuth();
+    // Шаг 4-7: Авторизация на godota2 с обновлением профиля (?update):
+    // сайт кэширует ник в сессии и без этого не увидит маркер.
+    await ensureGodotaAuth(true);
 
     // Шаг 8-11: Сбор бонуса
-    const bonusResult = await collectBonus();
+    let bonusResult = await collectBonus();
+
+    // Сайт не увидел маркер (?update не помог) — жёсткий перелогин через
+    // ?logout + Steam OpenID заставит его перечитать ник; одна повторная попытка.
+    if (bonusResult.status === 'marker_rejected') {
+      sendStatus(t('statusRetryRelogin'), 'progress');
+      if (await hardRelogin()) {
+        bonusResult = await collectBonus();
+      }
+    }
+    if (bonusResult.status === 'marker_rejected') {
+      throw new Error(bonusResult.message || t('errMarkerRejected'));
+    }
 
     // Сохраняем в историю
     if (bonusResult.status !== 'already_collected') {
@@ -710,11 +841,15 @@ async function runCollectOnly() {
       userWindowId = current ? current.id : null;
     } catch (e) { userWindowId = null; }
 
-    // Авторизация на godota2
-    await ensureGodotaAuth();
+    // Авторизация на godota2 (без ?update: ник не менялся, текущая сессия годится)
+    await ensureGodotaAuth(false);
 
-    // Сбор бонуса
+    // Сбор бонуса. Отказ из-за маркера здесь не лечим перелогином — в этом
+    // режиме ник не менялся, поэтому честно сообщаем причину.
     const bonusResult = await collectBonus();
+    if (bonusResult.status === 'marker_rejected') {
+      throw new Error(bonusResult.message || t('errMarkerRejected'));
+    }
 
     // Сохраняем в историю
     if (bonusResult.status !== 'already_collected') {
@@ -756,18 +891,24 @@ async function runCollectOnly() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startFullProcess') {
-    runFullProcess(message.profileUrl).then(sendResponse);
+    // Сначала даём завершиться авто-откату ника (если он шёл при старте worker'а).
+    recoveryPromise.then(() => runFullProcess(message.profileUrl)).then(sendResponse);
     return true;
   }
 
   if (message.action === 'collectBonusOnly') {
-    runCollectOnly().then(sendResponse);
+    recoveryPromise.then(() => runCollectOnly()).then(sendResponse);
     return true;
   }
 
   if (message.action === 'stopProcess') {
     sendResponse(requestCancel(t('errStoppedByUser')));
     return false;
+  }
+
+  if (message.action === 'detectProfileUrl') {
+    detectProfileUrl().then(sendResponse);
+    return true;
   }
 
   if (message.action === 'getRunningState') {
@@ -845,8 +986,12 @@ async function recoverPendingNickname() {
   }
 }
 
-chrome.runtime.onStartup.addListener(() => { recoverPendingNickname(); });
-chrome.runtime.onInstalled.addListener(() => { recoverPendingNickname(); });
+// Запускаем при КАЖДОМ старте worker'а (top-level код выполняется при каждом
+// пробуждении, а не только при onStartup/onInstalled). Так незавершённый откат
+// доводится при первом же пробуждении — открытии попапа, alarm'е и т.п., а не
+// только после перезапуска браузера. Если pending-записи нет, выходит сразу.
+// Обработчики запуска процессов ждут этот promise, чтобы не наложиться.
+const recoveryPromise = recoverPendingNickname().catch(() => {});
 
 // ─── Расписание автосбора (chrome.alarms) ───────────────────────────────────
 // Опциональный ежедневный автосбор. ВЫКЛЮЧЕН по умолчанию: каждый сбор меняет ник
@@ -926,6 +1071,7 @@ async function ensureAlarmFromStorage() {
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== ALARM_NAME) return;
+  await recoveryPromise; // если при пробуждении шёл авто-откат ника — ждём его
   if (isRunning) return; // не накладываемся на уже идущий процесс
 
   const data = await chrome.storage.sync.get('profileUrl');

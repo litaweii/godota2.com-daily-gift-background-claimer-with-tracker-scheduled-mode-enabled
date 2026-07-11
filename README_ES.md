@@ -5,7 +5,7 @@ Una extensión para Chrome que reclama automáticamente el bono diario (DAILY GI
 El sitio solo concede el bono cuando `godota2.com` aparece en tu nombre de Steam, por lo que la extensión realiza todo el proceso:
 
 1. Añade temporalmente ` godota2.com` a tu nombre de Steam.
-2. Inicia sesión en godota2.com mediante Steam OpenID cuando es necesario.
+2. Inicia sesión en godota2.com mediante Steam OpenID. Si ya hay una sesión abierta en el sitio, la extensión actualiza el perfil mediante `?update` (la sesión y las apuestas se conservan); de lo contrario, el sitio no vería el marcador en tu nombre. Si el sitio aún rechaza la recolección, la extensión vuelve a iniciar sesión con Steam y reintenta.
 3. Abre la pestaña DAILY GIFT y pulsa OPEN DAILY.
 4. Lee el importe del premio y lo guarda en el historial.
 5. Restaura tu nombre original.

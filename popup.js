@@ -121,6 +121,40 @@ function persistUrl() {
   if (url) chrome.storage.sync.set({ profileUrl: url });
 }
 
+// ─── Автоопределение профиля ────────────────────────────────────────────────
+// Актуальный аккаунт = залогиненная сейчас сессия, поэтому ссылку не просим
+// копировать руками: background определяет её по редиректу steamcommunity.com/my/
+// (фоллбэк — STEAMID со страницы godota2.com). Если нигде не залогинен,
+// открываем steamcommunity.com/my/ — после входа достаточно нажать ещё раз.
+
+const btnDetect = document.getElementById('btnDetect');
+
+btnDetect.addEventListener('click', async () => {
+  btnDetect.disabled = true;
+  setStatus(t('statusDetecting'), 'progress');
+
+  let res = null;
+  try {
+    res = await chrome.runtime.sendMessage({ action: 'detectProfileUrl' });
+  } catch (e) { /* worker недоступен — обработаем как неудачу */ }
+
+  btnDetect.disabled = false;
+
+  if (res && res.success) {
+    profileUrlInput.value = res.url;
+    chrome.storage.sync.set({ profileUrl: res.url });
+    setStatus(t('statusDetected'), 'success');
+    return;
+  }
+
+  setStatus(t('errDetectFailed'), 'error');
+  // Даём прочитать подсказку, затем открываем Steam для входа
+  // (создание вкладки закрывает попап, поэтому не сразу).
+  setTimeout(() => {
+    chrome.tabs.create({ url: 'https://steamcommunity.com/my/' });
+  }, 1800);
+});
+
 // ─── Расписание автосбора ────────────────────────────────────────────────────
 
 async function initSchedule() {
@@ -239,9 +273,26 @@ btnStop.addEventListener('click', async () => {
   } catch (e) { /* ignore */ }
 });
 
-btnClear.addEventListener('click', async () => {
-  if (!confirm(t('confirmClearHistory'))) return;
+// Двухшаговое подтверждение вместо confirm(): нативные диалоги в попапах
+// расширений Chrome ненадёжны (могут молча возвращать false).
+let clearArmTimer = null;
 
+function disarmClear() {
+  if (clearArmTimer) clearTimeout(clearArmTimer);
+  clearArmTimer = null;
+  btnClear.classList.remove('armed');
+  btnClear.querySelector('span').textContent = t('btnClearLabel');
+}
+
+btnClear.addEventListener('click', async () => {
+  if (!btnClear.classList.contains('armed')) {
+    btnClear.classList.add('armed');
+    btnClear.querySelector('span').textContent = t('btnClearConfirm');
+    clearArmTimer = setTimeout(disarmClear, 3000);
+    return;
+  }
+
+  disarmClear();
   await chrome.runtime.sendMessage({ action: 'clearHistory' });
   await updateStats();
   historyList.innerHTML = '';

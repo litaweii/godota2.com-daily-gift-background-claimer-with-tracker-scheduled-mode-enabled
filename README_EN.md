@@ -5,7 +5,7 @@ A Chrome extension that automatically claims the daily bonus (DAILY GIFT) on [go
 The website only grants the bonus when `godota2.com` appears in your Steam name, so the extension handles the entire process:
 
 1. Temporarily adds ` godota2.com` to your Steam name.
-2. Signs in to godota2.com through Steam OpenID when needed.
+2. Signs in to godota2.com through Steam OpenID. If a session is already open on the site, the extension refreshes the profile via `?update` (the session and bets are kept) — otherwise the site would not see the marker in your name. If the site still rejects the collection, the extension re-signs in through Steam and retries.
 3. Opens the DAILY GIFT tab and clicks OPEN DAILY.
 4. Reads the prize amount and saves it to the history.
 5. Restores your original name.

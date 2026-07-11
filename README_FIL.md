@@ -5,7 +5,7 @@ Isang Chrome extension na awtomatikong kumukuha ng araw-araw na bonus (DAILY GIF
 Ibinibigay lamang ng website ang bonus kapag kasama ang `godota2.com` sa iyong Steam name, kaya ang extension ang gumagawa ng buong proseso:
 
 1. Pansamantalang idinaragdag ang ` godota2.com` sa iyong Steam name.
-2. Nagla-log in sa godota2.com gamit ang Steam OpenID kung kinakailangan.
+2. Nagla-log in sa godota2.com gamit ang Steam OpenID. Kung may bukas nang session sa site, nire-refresh ng extension ang profile gamit ang `?update` (nananatili ang session at mga taya) — kung hindi, hindi makikita ng site ang marker sa pangalan mo. Kung tatanggihan pa rin ng site ang pagkolekta, magsa-sign in ulit ang extension sa Steam at susubukan muli.
 3. Binubuksan ang DAILY GIFT tab at pinipindot ang OPEN DAILY.
 4. Binabasa ang halaga ng premyo at sine-save ito sa history.
 5. Ibinabalik ang orihinal mong pangalan.
